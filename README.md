@@ -194,9 +194,3 @@ Local Application Request
 - **Distributed Execution:** Dockerized worker pools provide warm, scalable compute environments.
 - **Real-Time Telemetry:** Live WebSocket streams power the local health and metric dashboard.
 - **Fault-Tolerant Architecture:** Resilient task handling designed to gracefully survive simulated network and worker failures.
-
----
-
-# License
-
-MIT License
