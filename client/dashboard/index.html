@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud RAM — Download More RAM</title>
+  <meta name="description"
+    content="Cloud RAM: Augment your local compute with cloud resources. The Download More RAM meme, made real.">
+  <link rel="stylesheet" href="style.css">
+  <!-- Chart.js from CDN — requires internet. If offline, gauges degrade gracefully -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+
+  <!-- ── Server Offline Warning ──────────────────────────────────────────────── -->
+  <div id="serverOfflineBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;
+  background:linear-gradient(90deg,#1a0505,#2d0a0a);border-bottom:2px solid #ff4757;
+  color:#ff8c94;font-size:0.82rem;padding:8px 16px;
+  display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+    <strong style="color:#ff4757">⚠ Servers not running</strong>
+    <span style="color:#aaa">— open TWO PowerShell terminals:</span>
+    <code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:4px;color:#ffd700">
+    cd ram\server  &amp;&amp;  python -m uvicorn main:app --port 8000
+  </code>
+    <span style="color:#aaa">then</span>
+    <code style="background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:4px;color:#ffd700">
+    cd ram  &amp;&amp;  python client/monitor.py
+  </code>
+    <span style="color:#aaa">then open</span>
+    <strong style="color:#00d4ff">http://localhost:8001</strong>
+    <button onclick="this.parentElement.style.display='none'" style="margin-left:auto;background:transparent;border:1px solid #ff4757;color:#ff8c94;
+    border-radius:4px;padding:1px 10px;cursor:pointer;font-size:0.78rem">✕</button>
+  </div>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">💾</span>
+      <span class="logo-text">Cloud RAM</span>
+      <span class="logo-badge">v1.0 POC</span>
+    </div>
+    <div class="header-right">
+      <div class="status-pill">
+        <div class="status-dot" id="monitorDot"></div>
+        <span id="monitorText">Monitor Offline</span>
+      </div>
+      <div class="status-pill">
+        <div class="status-dot" id="cloudDot"></div>
+        <span id="cloudText">Cloud Offline</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- ── Row 1: Local Gauges + Cloud RAM ──────────────────────────────────── -->
+    <div class="grid-3 section">
+
+      <!-- RAM Gauge -->
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Local RAM</div>
+        <div class="gauge-wrap">
+          <div class="gauge-container">
+            <canvas id="ramGauge"></canvas>
+            <div class="gauge-value">
+              <span class="gauge-pct" id="ramPct">–%</span>
+              <span class="gauge-label">used</span>
+            </div>
+          </div>
+          <div class="gauge-sub" id="ramDetail">Start monitor to see RAM</div>
+          <div class="chart-history"><canvas id="ramLine"></canvas></div>
+        </div>
+      </div>
+
+      <!-- CPU Gauge -->
+      <div class="card">
+        <div class="card-title"><span class="dot" style="background:#a855f7;box-shadow:0 0 6px #a855f7"></span>Local CPU
+        </div>
+        <div class="gauge-wrap">
+          <div class="gauge-container">
+            <canvas id="cpuGauge"></canvas>
+            <div class="gauge-value">
+              <span class="gauge-pct" id="cpuPct"
+                style="background:linear-gradient(135deg,#a855f7,#ec4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">–%</span>
+              <span class="gauge-label">load</span>
+            </div>
+          </div>
+          <div class="gauge-sub" id="cpuDetail">Start monitor to see CPU</div>
+          <div class="chart-history"><canvas id="cpuLine"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Cloud RAM Card -->
+      <div class="card" id="cloudCard">
+        <div class="card-title"><span class="dot" style="background:#7c3aed;box-shadow:0 0 6px #7c3aed"></span>Cloud RAM
+        </div>
+        <div class="cloud-stat">
+          <div>
+            <span class="cloud-ram-number" id="cloudRamNumber">0</span>
+            <span class="cloud-ram-unit">MB</span>
+          </div>
+          <div class="cloud-ram-label">Allocated</div>
+          <div class="allocated-badge" id="allocBadge" style="display:none">
+            <span>●</span> Active Session
+          </div>
+          <div style="font-size:0.72rem;color:var(--text-400);text-align:center;line-height:1.6;margin-top:0.5rem">
+            Session: <span id="sessionInfo" style="color:var(--text-300)">—</span><br>
+            Worker: <span id="workerInfo" style="color:var(--text-300)">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Row 2: Download More RAM ─────────────────────────────────────────── -->
+    <div class="section">
+      <div class="download-section">
+        <h1 class="download-title">⬇ Download More RAM ⬇</h1>
+        <p class="download-subtitle">
+          Request cloud compute resources. Offload workloads automatically when RAM pressure is detected.
+        </p>
+
+        <!-- Decision Banner -->
+        <div class="decision-banner" id="decisionBanner"></div>
+
+        <!-- Slider + Button -->
+        <div class="ram-slider-row">
+          <span style="font-size:0.8rem;color:var(--text-300)">Amount:</span>
+          <input type="range" class="ram-slider" id="ramSlider" min="1" max="16" value="2" oninput="onSliderChange()">
+          <span class="ram-amount-label" id="ramAmountLabel">2 GB</span>
+          <button class="btn-download" id="downloadBtn" onclick="downloadMoreRAM()">⬇ Download More RAM</button>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-text" id="progressText">Connecting...</div>
+        </div>
+
+        <!-- Fault Tolerance Buttons -->
+        <div style="display:flex;gap:0.75rem;justify-content:center;margin-top:1.25rem;flex-wrap:wrap">
+          <button class="btn btn-danger" onclick="simulateCrash()">⚡ Simulate Worker Crash</button>
+          <button class="btn btn-danger" onclick="simulateNetworkDrop()">📡 Simulate Network Drop</button>
+          <button class="btn" onclick="releaseSession()">⬆ Release Session</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Row 3: Task Offloader + Benchmark ─────────────────────────────────── -->
+    <div class="grid-2 section">
+
+      <!-- Task Offloader -->
+      <div class="card">
+        <div class="card-title"><span class="dot"
+            style="background:var(--purple);box-shadow:0 0 6px var(--purple)"></span>Task Offloader</div>
+
+        <div class="form-group">
+          <label class="form-label">Task Type</label>
+          <select class="form-select" id="taskType" onchange="onTaskTypeChange()">
+            <option value="matrix_multiply">Matrix Multiply (CPU + Memory)</option>
+            <option value="image_filter">Image Filter (Visual)</option>
+            <option value="csv_aggregate">CSV Aggregate (Data Science)</option>
+            <option value="compress">zstd Compression (I/O)</option>
+          </select>
+        </div>
+
+        <!-- Dynamic params -->
+        <div class="form-group" id="paramNGroup">
+          <label class="form-label">Matrix Size (n × n)</label>
+          <input type="number" class="form-input" id="paramN" placeholder="Default: 1000" min="100" max="5000"
+            step="100">
+        </div>
+
+        <div class="form-group" id="filterTypeGroup" style="display:none">
+          <label class="form-label">Filter Type</label>
+          <select class="form-select" id="filterType">
+            <option value="blur">Gaussian Blur</option>
+            <option value="sharpen">Sharpen</option>
+            <option value="edge">Edge Detection</option>
+            <option value="emboss">Emboss</option>
+          </select>
+        </div>
+
+        <!-- Task Status -->
+        <div style="margin-bottom:0.75rem" id="taskStatus"></div>
+
+        <button class="btn btn-primary" id="offloadBtn" onclick="offloadTask()"
+          style="width:100%;justify-content:center">
+          ☁ Offload to Cloud
+        </button>
+
+        <!-- Result box -->
+        <div id="taskResultBox" style="display:none;margin-top:1rem">
+          <div class="card-title" style="margin-bottom:0.5rem"><span class="dot"
+              style="background:var(--green);box-shadow:0 0 6px var(--green)"></span>Result</div>
+          <div class="task-result">
+            <pre id="taskResultPre"></pre>
+          </div>
+          <img id="resultImage" class="img-preview" alt="Processed image output">
+        </div>
+      </div>
+
+      <!-- Benchmark Panel -->
+      <div class="card">
+        <div class="card-title"><span class="dot"
+            style="background:var(--yellow);box-shadow:0 0 6px var(--yellow)"></span>Performance Benchmark</div>
+        <p style="font-size:0.8rem;color:var(--text-300);margin-bottom:1rem;line-height:1.6">
+          Runs the same task <strong>locally</strong> and on the <strong>cloud</strong>, then compares timing, RAM
+          usage, and CPU load.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Task to Benchmark</label>
+          <select class="form-select" id="benchTask">
+            <option value="matrix_multiply">Matrix Multiply</option>
+            <option value="image_filter">Image Filter</option>
+            <option value="csv_aggregate">CSV Aggregate</option>
+            <option value="compress">Compression</option>
+          </select>
+        </div>
+
+        <button class="btn btn-purple" id="benchBtn" onclick="runBenchmark()"
+          style="width:100%;justify-content:center;margin-bottom:1rem">
+          ▶ Run Benchmark
+        </button>
+
+        <!-- Results table -->
+        <table class="bench-table" id="benchTable">
+          <tr>
+            <th>Metric</th>
+            <th>🖥 Local</th>
+            <th>☁ Cloud</th>
+          </tr>
+          <tr>
+            <td colspan="3" style="text-align:center;color:var(--text-400);font-size:0.8rem;padding:1rem">
+              Run a benchmark to see comparison
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Row 4: System + Workers + Log ─────────────────────────────────────── -->
+    <div class="grid-12 section">
+
+      <!-- Left: System Stats + Workers -->
+      <div style="display:flex;flex-direction:column;gap:1.25rem">
+
+        <!-- Mini Stats -->
+        <div class="card">
+          <div class="card-title"><span class="dot"></span>System Stats</div>
+          <div class="mini-stats">
+            <div class="mini-stat">
+              <div class="mini-stat-val" id="availRam">—</div>
+              <div class="mini-stat-lbl">RAM Free</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-val" id="diskPct">—</div>
+              <div class="mini-stat-lbl">Disk Used</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-val" id="cpuCores">—</div>
+              <div class="mini-stat-lbl">CPU Cores</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-val" id="tasksRun">0</div>
+              <div class="mini-stat-lbl">Tasks Run</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-val" id="lastTaskTime">—</div>
+              <div class="mini-stat-lbl">Last Task</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Processes -->
+        <div class="card">
+          <div class="card-title"><span class="dot"></span>Top Processes by Memory</div>
+          <table class="bench-table">
+            <thead>
+              <tr>
+                <th>PID</th>
+                <th>Name</th>
+                <th>RAM%</th>
+              </tr>
+            </thead>
+            <tbody id="procTable">
+              <tr>
+                <td colspan="3" style="color:var(--text-400);text-align:center">Start monitor agent to see processes
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Worker Pool -->
+        <div class="card">
+          <div class="card-title"><span class="dot"
+              style="background:var(--green);box-shadow:0 0 6px var(--green)"></span>Worker Pool</div>
+          <div class="worker-grid">
+            <div class="worker-node active" data-worker="w-01"><span class="worker-dot"></span>w-01 Ready</div>
+            <div class="worker-node active" data-worker="w-02"><span class="worker-dot"></span>w-02 Ready</div>
+            <div class="worker-node active" data-worker="w-03"><span class="worker-dot"></span>w-03 Ready</div>
+            <div class="worker-node" data-worker="w-04"><span class="worker-dot"></span>w-04 Standby</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Activity Log -->
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="dot" style="background:var(--orange);box-shadow:0 0 6px var(--orange)"></span>
+            Activity Log
+          </div>
+          <button class="btn" style="padding:2px 10px;font-size:0.7rem"
+            onclick="document.getElementById('activityLog').innerHTML=''">Clear</button>
+        </div>
+        <div class="log-container" id="activityLog"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
